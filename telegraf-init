@@ -137,12 +137,14 @@ telegraf_upgrade()
 	if [ "${PRDPLATFORM}" = "x64-embedded" ]; then
 		PACKAGELIST="${APPNAME}"
 
+		# To fix pkg: Repository FreeBSD missing. 'pkg update' required on Embedded platforms.
+		pkg upgrade
+
 		# Set product version variables.
 		# We have to use the manifest file for version comparison for Embedded platform.
 		TELEGRAF=$(grep '"version":"' ${CWDIR}/${FULLAPPNAME}/${APPNAME}/+MANIFEST | cut -d',' -f3 | egrep -o "([0-9]{1,}\.)+[0-9]{1,}" | tr -d '.')
-		
 		NEWTELEGRAF=$(pkg search ${APPNAME} | cut -d'-' -f2 | tr -d '.' | cut -d' ' -f1)
-		
+
 		# Extract new fetched packages for Embedded platform on new version.
 		if [ "${NEWTELEGRAF}" -gt "${TELEGRAF}" ]; then
 			RESTART=1
