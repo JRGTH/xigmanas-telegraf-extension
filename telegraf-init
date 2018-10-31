@@ -1,0 +1,491 @@
+#!/bin/sh
+# telegraf-init
+# Telegraf add-on for NAS4Free/XigmaNAS x64 11.x and later.
+# (https://www.xigmanas.com/forums/)
+# Debug script
+#set -x
+
+# Copyright (c) 2018 José Rivera (JoseMR)
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that following conditions are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS 'AS IS' AND ANY
+# EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+# THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# Set environment.
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+
+# Determine full working directory.
+CWDIR=$(dirname $(realpath $0))
+
+# Global variables.
+PLATFORM=$(uname -m)
+PRODUCT=$(uname -i)
+PRDVERSION=$(uname -r | cut -d '-' -f1 | tr -d '.')
+PRDPLATFORM=$(cat /etc/platform)
+SCRIPTNAME=$(basename $0)
+CONFIG="/cf/conf/config.xml"
+APPNAME="telegraf"
+EXTLOGFILE="${CWDIR}/log/telegraf_ext.log"
+FULLAPPNAME="${APPNAME}-addon"
+PKGCONF="/etc/pkg/FreeBSD.conf"
+PKGCACHE="/var/cache/pkg"
+USRLOCAL="/usr/local"
+VARLOG="/var/log"
+TELEGRAFPATH="${USRLOCAL}/bin"
+INSTALLPATH="${CWDIR}/${FULLAPPNAME}"
+BRANCH="master"
+GITURL="https://github.com/JRGTH/xigmanas-${APPNAME}-extension/archive/${BRANCH}.zip"
+VERFILE="https://raw.githubusercontent.com/JRGTH/xigmanas-${APPNAME}-extension/${BRANCH}/version"
+
+error_notify()
+{
+	# Log/notify message on error and exit.
+	MSG="$*"
+	logger -t "${SCRIPTNAME}" "${MSG}"
+	echo -e "$*" >&2; exit 1
+}
+
+update_freebsdconf()
+{
+	# Update FreeBSD.conf to fetch latest packages.
+	if [ -f ${PKGCONF} ]; then 
+		if grep -q "quarterly" ${PKGCONF}; then
+			sed -i '' -E "s/quarterly/latest/g" ${PKGCONF} || \
+			error_notify "Error: A problem has occurred while updating FreeBSD.conf file."
+		fi
+	fi
+}
+
+telegraf_native_download()
+{
+	# Install latest telegraf package.
+	if ! pkg info | grep -q ${APPNAME}; then
+		# Check if telegraf already exist.
+		if [ ! -f ${TELEGRAFPATH}/${APPNAME} ]; then
+			update_freebsdconf
+			pkg install -y ${APPNAME} || error_notify "Error: A problem has occurred while fetching ${APPNAME}."
+		fi
+	fi
+}
+
+telegraf_initial_download()
+{
+	# Check if telegraf already exist.
+	if [ ! -f ${CWDIR}/${FULLAPPNAME}${TELEGRAFPATH}/${APPNAME} ]; then
+		# Fetch telegraf package.
+		update_freebsdconf
+		pkg fetch -y -o ${CWDIR}/download ${APPNAME} || \
+		error_notify "Error: A problem has occurred while fetching ${APPNAME}."
+		telegraf_pkg_extract
+	fi
+}
+
+telegraf_pkg_extract()
+{
+	# Extract fetched package for Embedded platform.
+	if [ ! -f ${CWDIR}/${FULLAPPNAME}/${APPNAME}/+MANIFEST ]; then
+		echo "Extracting ${APPNAME}..."
+		tar -Jxf ${CWDIR}/download/All/${APPNAME}-*.txz -C ${CWDIR}/${FULLAPPNAME}/ || \
+		error_notify "Error: A problem has occurred while extractig ${APPNAME} files."
+		mkdir -p ${CWDIR}/${FULLAPPNAME}/${APPNAME}
+		mv ${CWDIR}/${FULLAPPNAME}/+* ${CWDIR}/${FULLAPPNAME}/${APPNAME}
+		rm ${CWDIR}/download/All/${APPNAME}-*.txz
+		echo "Done!"
+	fi
+}
+
+ext_initial_download()
+{
+	# Always ensure the version file is present, otherwise update the extension files on startup.
+	if [ ! -f ${CWDIR}/version ]; then
+		echo "Fetching and extracting extension files..."
+		mkdir -p ${CWDIR}/update
+		fetch -ao ${CWDIR}/update --no-verify-peer --timeout=30 ${GITURL} || \
+		error_notify "Error: A problem has occurred while fetching extension package."
+		tar -xf ${CWDIR}/update/*${BRANCH}.zip --exclude='.git*' --strip-components 1 -C ${CWDIR}/update
+		chmod +x ${CWDIR}/update/${SCRIPTNAME}
+		cp -Rf ${CWDIR}/update/* ${CWDIR}/
+		rm -R ${CWDIR}/update
+		echo "Done!"
+	fi
+}
+
+telegraf_upgrade()
+{
+	# Update FreeBSD.conf file.
+	update_freebsdconf
+
+	echo "Looking for new ${APPNAME} package..."
+
+	if [ "${PRDPLATFORM}" = "x64-embedded" ]; then
+		PACKAGELIST="${APPNAME}"
+
+		# Set product version variables.
+		# We have to use the manifest file for version comparison for Embedded platform.
+		TELEGRAF=$(grep '"version":"' ${CWDIR}/${FULLAPPNAME}/${APPNAME}/+MANIFEST | cut -d',' -f3 | egrep -o "([0-9]{1,}\.)+[0-9]{1,}" | tr -d '.')
+		
+		NEWTELEGRAF=$(pkg search ${APPNAME} | cut -d'-' -f2 | tr -d '.' | cut -d' ' -f1)
+		
+		# Extract new fetched packages for Embedded platform on new version.
+		if [ "${NEWTELEGRAF}" -gt "${TELEGRAF}" ]; then
+			RESTART=1
+			echo "New ${APPNAME} package found, performing upgrade..."
+			NEWTELEGRAF_VER=$(pkg search ${APPNAME} | cut -d'-' -f2 | cut -d' ' -f1)
+			pkg fetch -y -o ${CWDIR}/download ${APPNAME}-${NEWTELEGRAF_VER} || \
+			error_notify "Error: A problem has occurred while fetching/locating ${pkg}."
+			echo "Extracting ${APPNAME}-${NEWTELEGRAF_VER}..."
+			tar -Jxf ${CWDIR}/download/All/${APPNAME}-${NEWTELEGRAF_VER}.txz -C ${CWDIR}/${FULLAPPNAME}/ || \
+			error_notify "Error: A problem has occurred while extractig files."
+			mv ${CWDIR}/${FULLAPPNAME}/+* ${CWDIR}/${FULLAPPNAME}/${APPNAME}/
+		else
+			echo "No new ${APPNAME} package available!"
+		fi
+
+	elif [ "${PRDPLATFORM}" = "x64-full" ]; then
+		# Set current version.
+		TELEGRAF=$(pkg info | grep ${APPNAME} | cut -d'-' -f2 | tr -d '.' | cut -d' ' -f1)
+
+		# Issue telegraf upgrade command in Full platforms. 
+		pkg upgrade -y ${APPNAME} || \
+		error_notify "Error: A problem has occurred while upgrading ${APPNAME}."
+
+		# Set new version.
+		NEWTELEGRAF=$(pkg info | grep ${APPNAME} | cut -d'-' -f2 | tr -d '.' | cut -d' ' -f1)
+		if [ "${NEWTELEGRAF}" -gt "${TELEGRAF}" ]; then
+			echo "New ${APPNAME} package found and upgraded!"
+		else
+			echo "No new ${APPNAME} package available!"
+		fi
+	fi
+}
+
+extension_upgrade()
+{
+	# Perform an online extension upgrade.
+	DATE=$(date +"%a %b %d %T %Y")
+	echo "Looking for new ${FULLAPPNAME} package!"
+	mkdir -p ${CWDIR}/update
+	fetch -ao ${CWDIR}/update --no-verify-peer --timeout=30 ${VERFILE} || \
+	error_notify "Error: A problem has occurred while fetching version file."
+
+	# Compare version files and fetch latest package if available.
+	if [ -f ${CWDIR}/update/version ]; then
+		UPDATEVER=$(cat ${CWDIR}/update/version | tr -d .)
+		CURRENTVER=$(cat ${CWDIR}/version | tr -d .)
+		if [ "${UPDATEVER}" -gt "${CURRENTVER}" ]; then
+			echo "New ${FULLAPPNAME} package found, performing upgrade..."
+			fetch -ao ${CWDIR}/update --no-verify-peer --timeout=30 ${GITURL} || \
+			error_notify "Error: A problem has occurred while fetching extension package."
+			tar -xf ${CWDIR}/update/*${BRANCH}.zip --exclude='.git*' --strip-components 1 -C ${CWDIR}/update
+			chmod +x ${CWDIR}/update/${SCRIPTNAME}
+			cp -Rf ${CWDIR}/update/* ${CWDIR}/
+			rm -R ${CWDIR}/update
+
+			# Logging the update event.
+			UPDATEVERSION=$(cat ${CWDIR}/version)
+			echo "${DATE}: ${FULLAPPNAME} upgraded to ${UPDATEVERSION}" >> ${EXTLOGFILE}
+			echo "${FULLAPPNAME} package upgrade completed!"
+		else
+			echo "${FULLAPPNAME} is on the latest version!"
+			rm -R ${CWDIR}/update
+		fi
+	fi
+}
+
+create_addon_env()
+{
+	# Create required directories.
+	if [ ! -d ${CWDIR}/download/All ]; then
+		mkdir -p ${CWDIR}/download/All
+	fi
+	if [ ! -d ${CWDIR}/log ]; then
+		mkdir -p ${CWDIR}/log
+	fi
+	if [ ! -d ${CWDIR}/${FULLAPPNAME} ]; then
+		mkdir -p ${CWDIR}/${FULLAPPNAME}
+	fi
+	if [ ! -d ${CWDIR}/${FULLAPPNAME}/${TELEGRAFPATH} ]; then
+		mkdir -p ${CWDIR}/${FULLAPPNAME}/${TELEGRAFPATH}
+	fi
+
+	# Link telegraf-init to /usr/local/sbin.
+	if [ ! -f ${USRLOCAL}/sbin/${SCRIPTNAME} ]; then
+		ln -fs ${CWDIR}/${SCRIPTNAME} ${USRLOCAL}/sbin/${SCRIPTNAME}
+	fi
+}
+
+platform_check()
+{
+	# Check for working platform.
+	if [ "${PRDPLATFORM}" = "x64-embedded" ]; then
+		create_addon_env
+		ext_initial_download
+		telegraf_initial_download
+		sys_symlinkdir
+	elif [ "${PRDPLATFORM}" = "x64-full" ]; then
+		create_addon_env
+		ext_initial_download
+		telegraf_native_download
+	fi
+}
+
+bin_symlinks()
+{
+	# Main telegraf symlinks.
+	if [ -d ${INSTALLPATH}/${TELEGRAFPATH} ]; then
+		cd ${INSTALLPATH}/${TELEGRAFPATH}
+		for file in *
+			do
+				ln -Ffhs ${INSTALLPATH}/${TELEGRAFPATH}/${file} ${USRLOCAL}/bin/${file}
+		done
+	fi
+}
+
+sys_symlinkdir()
+{
+	# Check and create/relink required symlinks/dirs for telegraf.
+	# This environment will be checked each time the script is started for consistency.
+
+	# Required directories for telegraf.
+	if [ ! -d ${USRLOCAL}/share/licenses ]; then
+		mkdir -p ${USRLOCAL}/share/licenses
+	fi
+
+	bin_symlinks
+
+	# Required symlinks for telegraf. 
+	if [ -d ${INSTALLPATH}/${USRLOCAL}/share/licenses ]; then
+		cd ${INSTALLPATH}/${USRLOCAL}/share/licenses
+		for file in *
+			do
+				ln -Ffhs ${INSTALLPATH}/${USRLOCAL}/share/licenses/${file} ${USRLOCAL}/share/licenses/${file}
+		done
+	fi
+	if [ -d ${INSTALLPATH}${VARLOG}/${APPNAME} ]; then
+		ln -Ffhs ${INSTALLPATH}${VARLOG}/${APPNAME} ${VARLOG}/${APPNAME}
+	fi
+	if [ -f ${INSTALLPATH}/${USRLOCAL}/etc/${APPNAME}.conf ]; then
+		ln -Ffhs ${INSTALLPATH}/${USRLOCAL}/etc/${APPNAME}.conf ${USRLOCAL}/etc/${APPNAME}.conf
+	elif [ -f ${INSTALLPATH}/${USRLOCAL}/etc/${APPNAME}.conf.sample ]; then
+		cd ${INSTALLPATH}/${USRLOCAL}/etc
+		cp ${APPNAME}.conf.sample ${APPNAME}.conf
+		ln -Ffhs ${INSTALLPATH}/${USRLOCAL}/etc/${APPNAME}.conf ${USRLOCAL}/etc/${APPNAME}.conf
+	fi
+
+	# Copy telegraf rc.
+	if [ -f ${INSTALLPATH}/${USRLOCAL}/etc/rc.d/${APPNAME} ]; then
+		cp ${INSTALLPATH}/${USRLOCAL}/etc/rc.d/${APPNAME} ${USRLOCAL}/etc/rc.d/${APPNAME}
+	fi
+}
+
+postinit_cmd()
+{
+	# Check and generate temporary php script for postinit command.
+	if ! grep -qw ${CWDIR}/${SCRIPTNAME} ${CONFIG}; then
+		touch ${CWDIR}/postinit || error_notify "Error: A problem has occurred while creating the postinit file."
+		chmod +x ${CWDIR}/postinit
+		if [ ! "${PRDVERSION}" -ge "110" ]; then
+			# Generate php script for NAS4Free 10.3 versions.
+			cat << EOF > ${CWDIR}/postinit
+<?php
+require_once("config.inc");
+require_once("functions.inc");
+\$cmd = dirname(__FILE__)."/${SCRIPTNAME}";
+	\$i =0;
+	if ( is_array(\$config['rc']['postinit'] ) && is_array( \$config['rc']['postinit']['cmd'] ) ) {
+		for (\$i; \$i < count(\$config['rc']['postinit']['cmd']);) {
+			if (preg_match('/${SCRIPTNAME}/', \$config['rc']['postinit']['cmd'][\$i])) break; ++\$i; }
+	}
+	\$config['rc']['postinit']['cmd'][\$i] = \$config['cmd']."\$cmd";
+	write_config();
+?>
+EOF
+		else
+			# Generate php script for NAS4Free/XigmaNAS 11.x versions.
+			cat << EOF > ${CWDIR}/postinit
+<?php
+require_once("config.inc");
+require_once("functions.inc");
+\$cmd = dirname(__FILE__)."/${SCRIPTNAME}";
+\$name = "Telegraf Extension";
+\$comment = "Start ${APPNAME}";
+\$rc = &array_make_branch(\$config,'rc','param'); 
+if(false === array_search_ex(\$name,\$rc,'name')):
+	\$rc_param = [];
+	\$rc_param['uuid'] = uuid();
+	\$rc_param['name'] = \$name;
+	\$rc_param['value'] = \$cmd;
+	\$rc_param['comment'] = \$comment;
+	\$rc_param['typeid'] = '2';
+	\$rc_param['enable'] = true;
+	\$rc[] = \$rc_param;
+	write_config();
+endif;
+unset(\$rc);
+?>
+EOF
+		fi
+
+		# Execute temporary php script.
+		if [ "${OBI_INSTALL}" != "ON" ]; then
+			echo "Creating postinit command..."
+			php-cgi -f ${CWDIR}/postinit && rm ${CWDIR}/postinit || \
+			error_notify "Error: A problem has occurred while executing postinit file."
+			echo "Done!"
+		fi
+	fi
+}
+
+pkg_upgrade()
+{
+	# Check for telegraf updates.
+	telegraf_upgrade
+
+	# Check for extension updates.
+	extension_upgrade
+}
+
+reset_install()
+{
+	# Reset the extension environment.
+	echo "Removing extension files..."
+	if [ -d ${CWDIR}/${FULLAPPNAME} ]; then
+		rm -rf ${CWDIR}/${FULLAPPNAME}
+	fi
+	if [ -d ${CWDIR}/download ]; then
+		rm -rf ${CWDIR}/download
+	fi
+	if [ -f ${CWDIR}/version ]; then
+		rm -f ${CWDIR}/version
+	fi
+}
+
+remove_addon()
+{
+	# Confirm for addon removal.
+	while :
+		do
+			read -p "Do you wish to proceed with the ${FULLAPPNAME} removal? [y/N]:" yn
+			case ${yn} in
+			[Yy]) break;;
+			[Nn]) exit 0;;
+			esac
+		done
+	echo "Proceeding..."
+
+	# Check for working platform.
+	if [ "${PRDPLATFORM}" = "x64-embedded" ]; then
+		if [ -d ${USRLOCAL}/share/licenses/${APPNAME}-* ]; then
+			rm -rf ${USRLOCAL}/share/licenses/${APPNAME}-*
+		fi
+		if [ -d ${USRLOCAL}/etc/rc.d/${APPNAME} ]; then
+			rm -f ${USRLOCAL}/etc/rc.d/${APPNAME}
+		fi
+		if [ -f ${USRLOCAL}/bin/${APPNAME} ]; then
+			rm -f ${USRLOCAL}/bin/${APPNAME}
+		fi
+		if [ -f ${USRLOCAL}/sbin/${FULLAPPNAME} ]; then
+			rm -f ${USRLOCAL}/sbin/${FULLAPPNAME}
+		fi
+		if [ -d ${VARLOG}/${APPNAME} ]; then
+			rm -rf ${VARLOG}/${APPNAME}
+		fi
+	elif [ "${PRDPLATFORM}" = "x64-full" ]; then
+		pkg delete -y ${APPNAME}
+	fi
+
+	# Remove addon related files and folders only-
+	# to protect any user-created custom files.
+	FILES="download log telegraf-addon README.md postinit release_notes version telegraf-init"
+	for file in ${FILES}; do
+		if [ -f ${CWDIR}/${file} ] || [ -d ${CWDIR}/${file} ]; then
+			rm -rf ${CWDIR}/${file}
+		fi
+	done
+
+	echo "Done!"
+	echo "Please manually remove the Telegraf Extension Command Script from the WebGUI."
+	exit 0
+}
+
+get_versions()
+{
+	# Get telegraf-addon extension version.
+	if [ -f "${CWDIR}/version" ]; then
+		APPVERSION=$(cat ${CWDIR}/version)
+	else
+		APPVERSION="version file not found!"
+	fi
+
+	# Display product versions.
+	echo -e "\nTelegraf version:" && ${USRLOCAL}/bin/telegraf --version
+	echo -e "\nExtension version:"
+	echo "${FULLAPPNAME} ${APPVERSION}"
+	exit 0
+}
+
+exec_status()
+{
+	# Log on startup success, else logging with faults.
+	if [ $? -eq 0 ]; then
+		MSG="script has been started successfully!"
+		logger -t ${SCRIPTNAME} ${MSG}
+	else
+		MSG="script started with faults"
+		logger -t ${SCRIPTNAME} ${MSG}
+	fi
+}
+
+telegraf_init()
+{
+	# Check for system compatibility.
+	if [ ! "${PLATFORM}" = "amd64" ]; then
+		echo "Unsupported platform!"; exit 1
+	fi 
+	# Check for product compatibility.
+	if [ ! "${PRDVERSION}" -ge "110" ]; then
+		echo "Unsupported version!"; exit 1
+	fi
+
+	echo "Initializing ${FULLAPPNAME}..."
+
+	# Function calls.
+	platform_check
+	postinit_cmd
+	exec_status
+}
+
+while getopts ":ouxrvh" option; do
+	case ${option} in
+		[h]) echo "Usage: ${SCRIPTNAME} -[option]";
+		echo "Options:"
+		echo "      -u  Upgrade Telegraf/Add-On packages."
+		echo "      -v  Display product versions."
+		echo "      -x  Reset ${FULLAPPNAME}."
+		echo "      -r  Remove ${FULLAPPNAME}."
+		echo "      -h  Display this help message."; exit 0;;
+		[o]) OBI_INSTALL="ON";; # To prevent nested PHP-CGI call for installation with OBI.
+		[u]) pkg_upgrade;;
+		[x]) reset_install;;
+		[r]) remove_addon;;
+		[v]) get_versions;;
+		[?]) echo "Invalid option, -h for usage."; exit 1;;
+	esac
+done
+telegraf_init
