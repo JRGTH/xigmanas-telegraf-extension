@@ -119,6 +119,7 @@ ext_initial_download()
 		fetch -ao ${CWDIR}/update --no-verify-peer --timeout=30 ${GITURL} || \
 		error_notify "Error: A problem has occurred while fetching extension package."
 		tar -xf ${CWDIR}/update/*${BRANCH}.zip --exclude='.git*' --strip-components 1 -C ${CWDIR}/update
+		rm -f ${CWDIR}/update/*${BRANCH}.zip
 		chmod +x ${CWDIR}/update/${SCRIPTNAME}
 		cp -Rf ${CWDIR}/update/* ${CWDIR}/
 		rm -R ${CWDIR}/update
@@ -193,6 +194,7 @@ extension_upgrade()
 			fetch -ao ${CWDIR}/update --no-verify-peer --timeout=30 ${GITURL} || \
 			error_notify "Error: A problem has occurred while fetching extension package."
 			tar -xf ${CWDIR}/update/*${BRANCH}.zip --exclude='.git*' --strip-components 1 -C ${CWDIR}/update
+			rm -f ${CWDIR}/update/*${BRANCH}.zip
 			chmod +x ${CWDIR}/update/${SCRIPTNAME}
 			cp -Rf ${CWDIR}/update/* ${CWDIR}/
 			rm -R ${CWDIR}/update
@@ -394,14 +396,17 @@ remove_addon()
 		if [ -d ${USRLOCAL}/share/licenses/${APPNAME}-* ]; then
 			rm -rf ${USRLOCAL}/share/licenses/${APPNAME}-*
 		fi
-		if [ -d ${USRLOCAL}/etc/rc.d/${APPNAME} ]; then
+		if [ -f ${USRLOCAL}/etc/rc.d/${APPNAME} ]; then
 			rm -f ${USRLOCAL}/etc/rc.d/${APPNAME}
 		fi
-		if [ -f ${USRLOCAL}/bin/${APPNAME} ]; then
-			rm -f ${USRLOCAL}/bin/${APPNAME}
+		if [ -f ${USRLOCAL}/etc/${APPNAME}.conf ]; then
+			rm -f ${USRLOCAL}/etc/${APPNAME}.conf
 		fi
-		if [ -f ${USRLOCAL}/sbin/${FULLAPPNAME} ]; then
-			rm -f ${USRLOCAL}/sbin/${FULLAPPNAME}
+		if [ -f ${USRLOCAL}/bin/${APPNAME} ]; then
+			rm -rf ${USRLOCAL}/bin/${APPNAME}
+		fi
+		if [ -f ${USRLOCAL}/sbin/${APPNAME}-init ]; then
+			rm -rf ${USRLOCAL}/sbin/${APPNAME}-init
 		fi
 		if [ -d ${VARLOG}/${APPNAME} ]; then
 			rm -rf ${VARLOG}/${APPNAME}

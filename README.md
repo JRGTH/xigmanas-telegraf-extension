@@ -12,6 +12,6 @@
 
 **Aditional Info**
 
-Additional information on Telegraf: <a href="https://www.influxdata.com/time-series-platform/telegraf/">Telegraf</a>
-Additional information on InfluxDB: <a href="https://www.influxdata.com/">InfluxDB</a>
-Additional information on Grafana: <a href="https://grafana.com/">Grafana</a>
+ *Additional information on Telegraf:* <a href="https://www.influxdata.com/time-series-platform/telegraf/">Telegraf</a>
+ *Additional information on InfluxDB:* <a href="https://www.influxdata.com/">InfluxDB</a>
+ *Additional information on Grafana:* <a href="https://grafana.com/">Grafana</a>
