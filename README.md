@@ -10,7 +10,7 @@
  queues, including InfluxDB, Graphite, OpenTSDB, Datadog, Librato,
  Kafka, MQTT, NSQ, and many others.
 
-**Aditional Info**
+**Additional Info**
 
  *Additional information on:* <a href="https://www.influxdata.com/time-series-platform/telegraf/">Telegraf</a>
 
