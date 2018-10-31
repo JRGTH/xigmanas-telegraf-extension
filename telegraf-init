@@ -1,7 +1,7 @@
 #!/bin/sh
 # telegraf-init
 # Telegraf add-on for NAS4Free/XigmaNAS x64 11.x and later.
-# (https://www.xigmanas.com/forums/)
+# (https://www.xigmanas.com/forums/viewtopic.php?f=71&t=14127)
 # Debug script
 #set -x
 
