@@ -40,13 +40,20 @@ PRDVERSION=$(uname -r | cut -d '-' -f1 | tr -d '.')
 PRDPLATFORM=$(cat /etc/platform)
 SCRIPTNAME=$(basename $0)
 CONFIG="/cf/conf/config.xml"
+PRDNAME="Telegraf"
 APPNAME="telegraf"
 EXTLOGFILE="${CWDIR}/log/telegraf_ext.log"
 FULLAPPNAME="${APPNAME}-addon"
 PKGCONF="/etc/pkg/FreeBSD.conf"
+WWWPATH="/usr/local/www"
 PKGCACHE="/var/cache/pkg"
 USRLOCAL="/usr/local"
 VARLOG="/var/log"
+EXTCONF="/conf/${APPNAME}_config"
+EXTCONFLINK="/var/etc/${APPNAME}_conf"
+AGENT_CONFIG="telegraf.conf"
+AGENT_PIDFILE="/var/run/${APPNAME}.pid"
+TELEGRAFRCD="/usr/local/etc/rc.d/${APPNAME}"
 TELEGRAFPATH="${USRLOCAL}/bin"
 INSTALLPATH="${CWDIR}/${FULLAPPNAME}"
 BRANCH="master"
@@ -59,6 +66,29 @@ error_notify()
 	MSG="$*"
 	logger -t "${SCRIPTNAME}" "${MSG}"
 	echo -e "$*" >&2; exit 1
+}
+
+runtime_config()
+{
+	# Run-time configuration and checks.
+	if ! sysrc -f ${CWDIR}${EXTCONF} -n TELEGRAF_CONFIG | grep -q "${AGENT_CONFIG}"; then
+		sysrc -f ${CWDIR}${EXTCONF} TELEGRAF_CONFIG=${CWDIR}/etc/${AGENT_CONFIG} >/dev/null 2>&1
+	fi
+
+	# Set the specified configuration file.
+	TELEGRAFCONF=$(sysrc -f ${CWDIR}${EXTCONF} -qn TELEGRAF_CONFIG)
+
+	# Create required directories if missing.
+	if [ ! -d ${CWDIR}/conf ]; then
+		mkdir -p ${CWDIR}/conf
+	fi
+	if [ ! -d ${CWDIR}/log ]; then
+		mkdir -p ${CWDIR}/log
+	fi
+
+	if [ -f "${AGENT_PIDFILE}" ]; then
+		PID=$(cat ${AGENT_PIDFILE})
+	fi
 }
 
 update_freebsdconf()
@@ -132,6 +162,7 @@ telegraf_upgrade()
 	# Update FreeBSD.conf file.
 	update_freebsdconf
 
+	# Check for telegraf updates.
 	echo "Looking for new ${APPNAME} package..."
 
 	if [ "${PRDPLATFORM}" = "x64-embedded" ]; then
@@ -176,6 +207,9 @@ telegraf_upgrade()
 			echo "No new ${APPNAME} package available!"
 		fi
 	fi
+
+	# Check for extension updates.
+	extension_upgrade
 }
 
 extension_upgrade()
@@ -210,6 +244,7 @@ extension_upgrade()
 			rm -R ${CWDIR}/update
 		fi
 	fi
+	exit 0
 }
 
 create_addon_env()
@@ -327,8 +362,8 @@ EOF
 require_once("config.inc");
 require_once("functions.inc");
 \$cmd = dirname(__FILE__)."/${SCRIPTNAME}";
-\$name = "Telegraf Extension";
-\$comment = "Start ${APPNAME}";
+\$name = "${PRDNAME} Extension";
+\$comment = "Start ${PRDNAME}";
 \$rc = &array_make_branch(\$config,'rc','param'); 
 if(false === array_search_ex(\$name,\$rc,'name')):
 	\$rc_param = [];
@@ -353,22 +388,42 @@ EOF
 			error_notify "Error: A problem has occurred while executing postinit file."
 			echo "Done!"
 		fi
+
+		# Set extension to disable by default.
+		sysrc -f ${CWDIR}${EXTCONF} EXT_ENABLE=NO INSTALL_DIR=${CWDIR} >/dev/null 2>&1
 	fi
 }
 
-pkg_upgrade()
+gui_start()
 {
-	# Check for telegraf updates.
-	telegraf_upgrade
-
-	# Check for extension updates.
-	extension_upgrade
+	# Initialize the extension gui.
+	if [ -d "${CWDIR}/gui" ]; then
+		# Always ensure the config directory/file exist.
+		if [ ! -f "${CWDIR}${EXTCONF}" ]; then
+			# Try to restore default configuration.
+			runtime_config
+		fi
+		#GUI_STATUS=$(sysrc -f ${CWDIR}${EXTCONF} -qn GUI_ENABLE)
+		#if [ "${GUI_STATUS}" = "YES" ]; then
+			# Store the installation path and link conf.
+			if ! sysrc -f ${CWDIR}${EXTCONF} -n INSTALL_DIR | grep -q "${CWDIR}"; then
+				sysrc -f ${CWDIR}${EXTCONF} INSTALL_DIR=${CWDIR} >/dev/null 2>&1
+			fi
+			mkdir -p ${EXTCONFLINK}
+			ln -Ffhs ${CWDIR}/conf ${EXTCONFLINK}/conf
+			# Copy the gui files, always keep updated on startup.
+			cp -R ${CWDIR}/gui/* ${WWWPATH}/ || error_notify "Error: A problem has occurred while copying extension gui files."
+		#fi
+	fi
 }
 
 reset_install()
 {
 	# Reset the extension environment.
 	echo "Removing extension files..."
+	if [ -d ${CWDIR}/conf ]; then
+		rm -rf ${CWDIR}/conf
+	fi
 	if [ -d ${CWDIR}/${FULLAPPNAME} ]; then
 		rm -rf ${CWDIR}/${FULLAPPNAME}
 	fi
@@ -393,19 +448,19 @@ remove_addon()
 		done
 	echo "Proceeding..."
 
-	# Check for working platform.
+	# Check for working platform and remove symlinks.
 	if [ "${PRDPLATFORM}" = "x64-embedded" ]; then
 		if [ -d ${USRLOCAL}/share/licenses/${APPNAME}-* ]; then
 			rm -rf ${USRLOCAL}/share/licenses/${APPNAME}-*
+		fi
+		if [ -d ${USRLOCAL}/share/locale-telegraf ]; then
+			rm -rf ${USRLOCAL}/share/locale-telegraf
 		fi
 		if [ -f ${USRLOCAL}/etc/rc.d/${APPNAME} ]; then
 			rm -f ${USRLOCAL}/etc/rc.d/${APPNAME}
 		fi
 		if [ -f ${USRLOCAL}/etc/${APPNAME}.conf ]; then
 			rm -f ${USRLOCAL}/etc/${APPNAME}.conf
-		fi
-		if [ -f ${USRLOCAL}/bin/${APPNAME} ]; then
-			rm -rf ${USRLOCAL}/bin/${APPNAME}
 		fi
 		if [ -f ${USRLOCAL}/sbin/${APPNAME}-init ]; then
 			rm -rf ${USRLOCAL}/sbin/${APPNAME}-init
@@ -417,9 +472,30 @@ remove_addon()
 		pkg delete -y ${APPNAME}
 	fi
 
+	# Remove extension and GUI components.
+	if [ -f "${WWWPATH}/${APPNAME}-gui.php" ]; then
+		rm -f ${WWWPATH}/${APPNAME}-gui.php
+	fi
+	if [ -d "${WWWPATH}/ext/telegraf-gui" ]; then
+		rm -rf ${WWWPATH}/ext/telegraf-gui
+	fi
+	if [ -f ${USRLOCAL}/bin/${APPNAME} ]; then
+		rm -rf ${USRLOCAL}/bin/${APPNAME}
+	fi
+	if [ -d ${VARLOG}/${APPNAME} ]; then
+		rm -rf ${VARLOG}/${APPNAME}
+	fi
+
+	# Remove empty ext folder to prevent empty "Extensions" tab.
+	if [ -d "${WWWPATH}/ext" ]; then
+		if [ ! "$(ls -A ${WWWPATH}/ext)" ]; then
+			rm -R ${WWWPATH}/ext
+		fi
+	fi
+
 	# Remove addon related files and folders only-
 	# to protect any user-created custom files.
-	FILES="download log telegraf-addon README.md postinit release_notes version telegraf-init"
+	FILES="conf download gui locale-telegraf log telegraf-addon README.md postinit release_notes version telegraf-init"
 	for file in ${FILES}; do
 		if [ -f ${CWDIR}/${file} ] || [ -d ${CWDIR}/${file} ]; then
 			rm -rf ${CWDIR}/${file}
@@ -447,15 +523,92 @@ get_versions()
 	exit 0
 }
 
-exec_status()
+ext_start()
 {
+	# Start Telegraf agent if enabled.
+	EXT_STATUS=$(sysrc -f ${CWDIR}${EXTCONF} -qn EXT_ENABLE)
+	if [ "${EXT_STATUS}" = "YES" ]; then
+		start_telegraf
+	fi
+}
+
+telegraf_usergroup()
+{
+	# Check and create Telegraf user/group.
+	if ! pw groupshow ${APPNAME} >/dev/null 2>&1; then
+		pw groupadd ${APPNAME} -g 884 >/dev/null 2>&1
+	fi
+	if ! pw usershow ${APPNAME} >/dev/null 2>&1; then
+		pw useradd ${APPNAME} -u 884 -g 884  -c "${APPNAME} user" -d /nonexistent -s /usr/sbin/nologin >/dev/null 2>&1
+	fi
+}
+
+rc_params()
+{
+	# Telegraf rc parameters.
+	if ! sysrc -f ${RCCONF} -n ${APPNAME}_enable | grep -q "YES"; then
+		sysrc ${APPNAME}_enable="YES" >/dev/null 2>&1
+	fi
+	if ! sysrc -f ${RCCONF} -n ${APPNAME}_conf | grep -q "${TELEGRAFCONF}"; then
+		sysrc ${APPNAME}_conf="${TELEGRAFCONF}" >/dev/null 2>&1
+	fi
+}
+
+start_telegraf()
+{
+	# Start Telegraf.
+	if ! ps -acx | grep -q "${APPNAME}"; then
+		if [ -n "${TELEGRAFCONF}" ]; then
+			service ${APPNAME} start 2> /dev/null || ${TELEGRAFRCD} onestart
+		else
+			echo "Telegraf configuration not found."
+			exit 1
+		fi
+	else
+		echo "${APPNAME} is already running as PID: ${PID}."
+	fi
+
 	# Log on startup success, else logging with faults.
 	if [ $? -eq 0 ]; then
 		MSG="script has been started successfully!"
 		logger -t ${SCRIPTNAME} ${MSG}
+		exit 0
 	else
 		MSG="script started with faults"
 		logger -t ${SCRIPTNAME} ${MSG}
+		exit 1
+	fi
+}
+
+stop_telegraf()
+{
+	if ps -acx | grep -q "${APPNAME}"; then
+		service ${APPNAME} stop 2> /dev/null || ${TELEGRAFRCD} onestop
+	else
+		echo "${APPNAME} is not running."
+		exit 0
+	fi
+
+	# Log on startup success, else logging with faults.
+	if [ $? -eq 0 ]; then
+		MSG="script has been started successfully!"
+		logger -t ${SCRIPTNAME} ${MSG}
+		exit 0
+	else
+		MSG="script started with faults"
+		logger -t ${SCRIPTNAME} ${MSG}
+		exit 1
+	fi
+}
+
+restart_telegraf()
+{
+	if ps -acx | grep -q "${APPNAME}"; then
+		service ${APPNAME} restart 2> /dev/null || ${TELEGRAFRCD} onerestart
+		exit 0
+	else
+		echo "${APPNAME} is not running."
+		exit 0
 	fi
 }
 
@@ -470,27 +623,40 @@ telegraf_init()
 		echo "Unsupported version!"; exit 1
 	fi
 
-	echo "Initializing ${FULLAPPNAME}..."
+	echo "Initializing ${APPNAME}..."
 
 	# Function calls.
 	platform_check
 	postinit_cmd
-	exec_status
+	gui_start
+	telegraf_usergroup
+	rc_params
+	ext_start
+
 }
 
-while getopts ":ouxrvh" option; do
+# Run-time configuration.
+runtime_config
+
+while getopts ":ospruxRvh" option; do
 	case ${option} in
 		[h]) echo "Usage: ${SCRIPTNAME} -[option]";
 		echo "Options:"
-		echo "      -u  Upgrade Telegraf/Add-On packages."
-		echo "      -v  Display product versions."
-		echo "      -x  Reset ${FULLAPPNAME}."
-		echo "      -r  Remove ${FULLAPPNAME}."
-		echo "      -h  Display this help message."; exit 0;;
+		echo "        -s  Start ${PRDNAME}."
+		echo "        -p  Stop ${PRDNAME}."
+		echo "        -r  Restart ${PRDNAME}."
+		echo "        -u  Upgrade ${PRDNAME}/Add-On packages."
+		echo "        -v  Display product versions."
+		echo "        -x  Reset ${PRDNAME} Extension config."
+		echo "        -R  Remove ${PRDNAME}."
+		echo "        -h  Display this help message."; exit 0;;
 		[o]) OBI_INSTALL="ON";; # To prevent nested PHP-CGI call for installation with OBI.
-		[u]) pkg_upgrade;;
+		[s]) start_telegraf;;
+		[p]) stop_telegraf;;
+		[r]) restart_telegraf;;
+		[u]) telegraf_upgrade;;
 		[x]) reset_install;;
-		[r]) remove_addon;;
+		[R]) remove_addon;;
 		[v]) get_versions;;
 		[?]) echo "Invalid option, -h for usage."; exit 1;;
 	esac

@@ -10,6 +10,13 @@
  queues, including InfluxDB, Graphite, OpenTSDB, Datadog, Librato,
  Kafka, MQTT, NSQ, and many others.
 
+**Credits**
+
+ J.M. Rivera (JRGTH) core script.
+ Andreas Schmidhuber (crestAT) GUI template.
+
+More information and description in the <a href="https://www.xigmanas.com/forums/viewtopic.php?f=71&t=14127">XigmaNAS Extension forum</a>
+
 **Additional Info**
 
  *Additional information on:* <a href="https://www.influxdata.com/time-series-platform/telegraf/">Telegraf</a>
