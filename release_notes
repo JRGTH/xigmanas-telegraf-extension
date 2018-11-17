@@ -3,6 +3,7 @@
 ============================
 Version    Description
 
+0.2.2....Fix typo in logging.
 0.2.1....Remove duplicate file.
 0.2.0....Add basic service control gui wrapper.
 0.1.4....Add pkg upgrade.

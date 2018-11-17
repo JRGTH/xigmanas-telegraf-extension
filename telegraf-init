@@ -574,7 +574,7 @@ start_telegraf()
 		logger -t ${SCRIPTNAME} ${MSG}
 		exit 0
 	else
-		MSG="script started with faults"
+		MSG="script started with faults!"
 		logger -t ${SCRIPTNAME} ${MSG}
 		exit 1
 	fi
@@ -589,13 +589,13 @@ stop_telegraf()
 		exit 0
 	fi
 
-	# Log on startup success, else logging with faults.
+	# Log on stop success, else logging with faults.
 	if [ $? -eq 0 ]; then
-		MSG="script has been started successfully!"
+		MSG="script has been stopped successfully!"
 		logger -t ${SCRIPTNAME} ${MSG}
 		exit 0
 	else
-		MSG="script started with faults"
+		MSG="script stopped with faults!"
 		logger -t ${SCRIPTNAME} ${MSG}
 		exit 1
 	fi
