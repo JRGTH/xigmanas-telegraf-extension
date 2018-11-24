@@ -40,7 +40,7 @@ require("auth.inc");
 require("guiconfig.inc");
 
 $application = "Telegraf";
-$pgtitle = array(gtext("Extensions"), "Telegraf");
+$pgtitle = array(gtext("Extensions"), gtext("Telegraf"));
 
 // For NAS4Free 10.x versions.
 $return_val = mwexec("/bin/cat /etc/prd.version | cut -d'.' -f1 | /usr/bin/grep '10'", true);
@@ -54,8 +54,7 @@ if ($return_val == 0) {
 //$rootfolder = dirname($config['rc']['postinit']['cmd'][$i]);
 $pidfile = "/var/run/telegraf.pid";
 $confdir = "/var/etc/telegraf_conf";
-$cwdir = exec("/usr/bin/grep 'INSTALL_DIR=' {$confdir}/conf/telegraf_config | cut -d'\"' -f2");
-$rootfolder = $cwdir;
+$rootfolder = exec("/usr/bin/grep 'INSTALL_DIR=' {$confdir}/conf/telegraf_config | cut -d'\"' -f2");
 $configfile = "{$rootfolder}/conf/telegraf_config";
 $versionfile = "{$rootfolder}/version";
 $date = strftime('%c');
@@ -263,9 +262,6 @@ $(document).ready(function(){
 });
 //]]>
 </script>
-<!-- The Spinner Elements -->
-<script src="js/spin.min.js"></script>
-<!-- use: onsubmit="spinner()" within the form tag -->
 <script type="text/javascript">
 <!--
 function enable_change(enable_change) {
@@ -282,6 +278,12 @@ function enable_change(enable_change) {
 </script>
 <form action="telegraf-gui.php" method="post" name="iform" id="iform" onsubmit="spinner()">
 	<table width="100%" border="0" cellpadding="0" cellspacing="0">
+		<tr><td class="tabnavtbl">
+			<ul id="tabnav">
+				<li class="tabact"><a href="telegraf-gui.php"><span><?=gettext("Telegraf");?></span></a></li>
+				<li class="tabinact"><a href="telegraf-config.php"><span><?=gettext("Configuration");?></span></a></li>
+			</ul>
+		</td></tr>
 		<tr><td class="tabcont">
 			<?php if (!empty($input_errors)) print_input_errors($input_errors);?>
 			<?php if (!empty($savemsg)) print_info_box($savemsg);?>
@@ -300,7 +302,7 @@ function enable_change(enable_change) {
 					<td class="vncellt"><?=gtext("Status");?></td>
 					<td class="vtable"><span name="getinfo" id="getinfo"><?=get_process_info()?></span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PID:&nbsp;<span name="getinfo_pid" id="getinfo_pid"><?=get_process_pid()?></span></td>
 				</tr>
-				<?php html_filechooser("agentconf_path", gtext("Telegraf config file"), $agentconf_path, gtext("Path to telegraf.conf agent configuration file."), $agentconf_path, true, 60);?>
+				<?php html_filechooser("agentconf_path", gtext("Telegraf Config File"), $agentconf_path, gtext("Path to telegraf.conf agent configuration file."), $agentconf_path, true, 60);?>
 			</table>
 			<div id="submit">
 				<input id="save" name="save" type="submit" class="formbtn" title="<?=gtext("Save settings");?>" value="<?=gtext("Save");?>"/>
@@ -311,6 +313,7 @@ function enable_change(enable_change) {
 			</div>
 			<div id="remarks">
 				<?php html_remark("note", gtext("Note"), sprintf(gtext("Removing Telegraf extension will preserve the telegaf.conf file(s).")));?>
+				<br />
 			</div>
 			
 			<div id="submit1">

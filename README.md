@@ -13,7 +13,7 @@
 **Credits**
 
  J.M. Rivera (JRGTH) core script.
- Andreas Schmidhuber (crestAT) GUI template.
+ Andreas Schmidhuber (crestAT) GUI complements.
 
 More information and description in the <a href="https://www.xigmanas.com/forums/viewtopic.php?f=71&t=14127">XigmaNAS Extension forum</a>
 
