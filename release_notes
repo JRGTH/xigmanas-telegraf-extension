@@ -3,6 +3,7 @@
 ============================
 Version    Description
 
+0.3.1....Fix sysrc path and set quite mode.
 0.3.0....Add config manager(thanks to crest).
 0.2.2....Fix typo in logging.
 0.2.1....Remove duplicate file.

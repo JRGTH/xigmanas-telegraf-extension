@@ -71,7 +71,7 @@ error_notify()
 runtime_config()
 {
 	# Run-time configuration and checks.
-	if ! sysrc -f ${CWDIR}${EXTCONF} -n TELEGRAF_CONFIG | grep -q "${AGENT_CONFIG}"; then
+	if ! sysrc -f ${CWDIR}${EXTCONF} -qn TELEGRAF_CONFIG | grep -q "${AGENT_CONFIG}"; then
 		sysrc -f ${CWDIR}${EXTCONF} TELEGRAF_CONFIG=${CWDIR}/etc/${AGENT_CONFIG} >/dev/null 2>&1
 	fi
 
@@ -406,7 +406,7 @@ gui_start()
 		#GUI_STATUS=$(sysrc -f ${CWDIR}${EXTCONF} -qn GUI_ENABLE)
 		#if [ "${GUI_STATUS}" = "YES" ]; then
 			# Store the installation path and link conf.
-			if ! sysrc -f ${CWDIR}${EXTCONF} -n INSTALL_DIR | grep -q "${CWDIR}"; then
+			if ! sysrc -f ${CWDIR}${EXTCONF} -qn INSTALL_DIR | grep -q "${CWDIR}"; then
 				sysrc -f ${CWDIR}${EXTCONF} INSTALL_DIR=${CWDIR} >/dev/null 2>&1
 			fi
 			mkdir -p ${EXTCONFLINK}
@@ -517,9 +517,8 @@ get_versions()
 	fi
 
 	# Display product versions.
-	echo -e "\nTelegraf version:" && ${USRLOCAL}/bin/telegraf --version
-	echo -e "\nExtension version:"
-	echo "${FULLAPPNAME} ${APPVERSION}"
+	${USRLOCAL}/bin/telegraf --version
+	echo -e "Extension version:" ${APPVERSION}
 	exit 0
 }
 
@@ -546,10 +545,10 @@ telegraf_usergroup()
 rc_params()
 {
 	# Telegraf rc parameters.
-	if ! sysrc -f ${RCCONF} -n ${APPNAME}_enable | grep -q "YES"; then
+	if ! sysrc -qn ${APPNAME}_enable | grep -q "YES"; then
 		sysrc ${APPNAME}_enable="YES" >/dev/null 2>&1
 	fi
-	if ! sysrc -f ${RCCONF} -n ${APPNAME}_conf | grep -q "${TELEGRAFCONF}"; then
+	if ! sysrc -qn ${APPNAME}_conf | grep -q "${TELEGRAFCONF}"; then
 		sysrc ${APPNAME}_conf="${TELEGRAFCONF}" >/dev/null 2>&1
 	fi
 }
