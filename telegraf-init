@@ -169,7 +169,7 @@ telegraf_upgrade()
 		PACKAGELIST="${APPNAME}"
 
 		# To fix pkg: Repository FreeBSD missing. 'pkg update' required on Embedded platforms.
-		pkg upgrade
+		pkg update
 
 		# Set product version variables.
 		# We have to use the manifest file for version comparison for Embedded platform.
