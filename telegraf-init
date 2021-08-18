@@ -131,11 +131,11 @@ telegraf_pkg_extract()
 	# Extract fetched package for Embedded platform.
 	if [ ! -f ${CWDIR}/${FULLAPPNAME}/${APPNAME}/+MANIFEST ]; then
 		echo "Extracting ${APPNAME}..."
-		tar -Jxf ${CWDIR}/download/All/${APPNAME}-*.txz -C ${CWDIR}/${FULLAPPNAME}/ || \
+		tar -Jxf ${CWDIR}/download/All/${APPNAME}-*.[tp][xk][zg] -C ${CWDIR}/${FULLAPPNAME}/ || \
 		error_notify "Error: A problem has occurred while extractig ${APPNAME} files."
 		mkdir -p ${CWDIR}/${FULLAPPNAME}/${APPNAME}
 		mv ${CWDIR}/${FULLAPPNAME}/+* ${CWDIR}/${FULLAPPNAME}/${APPNAME}
-		rm ${CWDIR}/download/All/${APPNAME}-*.txz
+		rm ${CWDIR}/download/All/${APPNAME}-*.[tp][xk][zg]
 		echo "Done!"
 	fi
 }
@@ -184,7 +184,7 @@ telegraf_upgrade()
 			pkg fetch -y -o ${CWDIR}/download ${APPNAME}-${NEWTELEGRAF_VER} || \
 			error_notify "Error: A problem has occurred while fetching/locating ${pkg}."
 			echo "Extracting ${APPNAME}-${NEWTELEGRAF_VER}..."
-			tar -Jxf ${CWDIR}/download/All/${APPNAME}-${NEWTELEGRAF_VER}.txz -C ${CWDIR}/${FULLAPPNAME}/ || \
+			tar -Jxf ${CWDIR}/download/All/${APPNAME}-${NEWTELEGRAF_VER}.[tp][xk][zg] -C ${CWDIR}/${FULLAPPNAME}/ || \
 			error_notify "Error: A problem has occurred while extractig files."
 			mv ${CWDIR}/${FULLAPPNAME}/+* ${CWDIR}/${FULLAPPNAME}/${APPNAME}/
 		else
