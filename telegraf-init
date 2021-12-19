@@ -412,7 +412,9 @@ gui_start()
 			mkdir -p ${EXTCONFLINK}
 			ln -Ffhs ${CWDIR}/conf ${EXTCONFLINK}/conf
 			# Copy the gui files, always keep updated on startup.
-			cp -R ${CWDIR}/gui/* ${WWWPATH}/ || error_notify "Error: A problem has occurred while copying extension gui files."
+			ln -fhs ${CWDIR}/gui/ext/telegraf-gui ${WWWPATH}/ext/ || error_notify "Error: A problem has occurred while copying extension gui files."
+			ln -fhs ${CWDIR}/gui/telegraf-config.php ${WWWPATH}/ || error_notify "Error: A problem has occurred while copying extension gui files."
+			ln -fhs ${CWDIR}/gui/telegraf-gui.php ${WWWPATH}/ || error_notify "Error: A problem has occurred while copying extension gui files."
 		#fi
 	fi
 }
@@ -473,6 +475,9 @@ remove_addon()
 	fi
 
 	# Remove extension and GUI components.
+	if [ -f "${WWWPATH}/${APPNAME}-config.php" ]; then
+		rm -rf ${WWWPATH}/${APPNAME}-config.php
+	fi
 	if [ -f "${WWWPATH}/${APPNAME}-gui.php" ]; then
 		rm -f ${WWWPATH}/${APPNAME}-gui.php
 	fi

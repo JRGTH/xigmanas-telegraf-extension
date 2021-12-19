@@ -3,6 +3,7 @@
 ============================
 Version    Description
 
+0.3.4....Link the extension gui files instead.
 0.3.3....Quick update to extract .pkg distfiles.
 0.3.2....Fix to don't upgrade all packages at once.
 0.3.1....Fix sysrc path and set quite mode.
