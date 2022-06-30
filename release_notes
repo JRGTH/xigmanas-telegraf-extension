@@ -3,6 +3,7 @@
 ============================
 Version    Description
 
+0.3.5....Fix for PHP 8.1 compatibility.
 0.3.4....Link the extension gui files instead.
 0.3.3....Quick update to extract .pkg distfiles.
 0.3.2....Fix to don't upgrade all packages at once.

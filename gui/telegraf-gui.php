@@ -216,13 +216,13 @@ $agentconf_path = exec("/bin/cat {$configfile} | /usr/bin/grep 'TELEGRAF_CONFIG=
 function get_version_telegraf() {
 	global $prdname;
 	exec('/usr/local/sbin/pkg info -I {$prdname} || echo "$(/usr/local/bin/telegraf --version) Time-series data collection"', $result);
-	return ($result[0]);
+	return ($result[0] ?? '');
 }
 
 function get_version_ext() {
 	global $versionfile;
 	exec("/bin/cat {$versionfile}", $result);
-	return ($result[0]);
+	return ($result[0] ?? '');
 }
 
 function get_process_info() {
